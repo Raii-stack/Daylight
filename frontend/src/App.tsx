@@ -74,6 +74,16 @@ const duration = (n: number) =>
   `${Math.floor(n / 60) ? `${Math.floor(n / 60)}h ` : ""}${
     n % 60 ? `${n % 60}m` : n === 0 ? "0m" : ""
   }`.trim()
+const formatCountdown = (seconds: number) => {
+  const totalSeconds = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const remainder = totalSeconds % 60
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+    2,
+    "0",
+  )}:${String(remainder).padStart(2, "0")}`
+}
 const time = (n: number) => {
   const minutes = ((n % 1440) + 1440) % 1440
   return `${Math.floor(minutes / 60) % 12 || 12}:${String(minutes % 60).padStart(2, "0")} ${
@@ -386,11 +396,7 @@ export default function App() {
   const scheduleStart = 0
   const scheduleEnd = scheduleStart + used
   const countdownSeconds = Math.max(0, available * 60 - timerElapsedSeconds)
-  const countdownMinutes = Math.floor(countdownSeconds / 60)
-  const countdownRemainder = countdownSeconds % 60
-  const countdownLabel = `${String(countdownMinutes).padStart(2, "0")}:${String(
-    countdownRemainder,
-  ).padStart(2, "0")}`
+  const countdownLabel = formatCountdown(countdownSeconds)
   const largestDeadlineOverrun = tasks.reduce((largest, task, index) => {
     const taskEnd =
       scheduleStart +
@@ -1358,8 +1364,7 @@ export default function App() {
                           .reduce((s, t) => s + effectiveMinutes(t), 0)
                       const taskTime = effectiveMinutes(task)
                       const end = start + taskTime
-                      const limit = toMinutes(task.deadline)
-                      const deadlineDifference = limit - end
+                      const availableBeforeTimerEnd = available - end
                       return (
                         <div
                           key={task.id}
@@ -1420,14 +1425,14 @@ export default function App() {
                               )}
                             <p
                               className={`mt-1 text-[10px] ${
-                                deadlineDifference >= 0
+                                availableBeforeTimerEnd >= 0
                                   ? "text-[#71927b]"
                                   : "text-[#ac574d]"
                               }`}
                             >
-                              {deadlineDifference >= 0
-                                ? `${duration(deadlineDifference)} available before the timer mark`
-                                : `${duration(Math.abs(deadlineDifference))} past the timer mark`}
+                              {availableBeforeTimerEnd >= 0
+                                ? `${duration(availableBeforeTimerEnd)} available before the timer ends`
+                                : `${duration(Math.abs(availableBeforeTimerEnd))} past the timer end`}
                             </p>
                           </div>
                           <span
