@@ -1,0 +1,263 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', sans-serif;
+}
+
+body { margin: 0; font-family: 'DM Sans', sans-serif; }
+button, select { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 2px solid #7653c4;
+  outline-offset: 3px;
+}
+
+/* The dark theme mirrors the light palette while preserving Daylight's purple accent. */
+.dark-mode body {
+  background: #0d0b13;
+  color: #f4f0fa;
+}
+.dark-mode [class*="bg-[#f8f9fc]"] {
+  background-color: #0d0b13 !important;
+}
+.dark-mode [class*="bg-white"] {
+  background-color: #17131f !important;
+}
+.dark-mode [class*="bg-[#f"],
+.dark-mode [class*="bg-[#e"],
+.dark-mode [class*="bg-[#d"] {
+  background-color: #211b2b !important;
+}
+.dark-mode [class*="bg-[#eeebff]"],
+.dark-mode [class*="bg-[#efebfa]"],
+.dark-mode [class*="bg-[#efebfb]"],
+.dark-mode [class*="bg-[#f0ebfa]"],
+.dark-mode [class*="bg-[#f0ecfc]"],
+.dark-mode [class*="bg-[#f3effc]"],
+.dark-mode [class*="bg-[#f4f0fb]"],
+.dark-mode [class*="bg-[#f5f0fc]"],
+.dark-mode [class*="bg-[#f5f1fc]"],
+.dark-mode [class*="bg-[#f5f1ff]"],
+.dark-mode [class*="bg-[#f6f2fc]"],
+.dark-mode [class*="bg-[#eee8fa]"],
+.dark-mode [class*="bg-[#eee8ff]"],
+.dark-mode [class*="bg-[#eee9fb]"],
+.dark-mode [class*="bg-[#ebe5fc]"],
+.dark-mode [class*="bg-[#ede7fa]"] {
+  background-color: #2a203b !important;
+}
+.dark-mode [class*="bg-[#eff8f0]"],
+.dark-mode [class*="bg-[#eef7f0]"],
+.dark-mode [class*="bg-[#edf8ef]"],
+.dark-mode [class*="bg-[#eaf5ec]"],
+.dark-mode [class*="bg-[#e7f2e8]"],
+.dark-mode [class*="bg-[#f2f8f3]"],
+.dark-mode [class*="bg-[#f7fbf8]"],
+.dark-mode [class*="bg-[#d7eddb]"],
+.dark-mode [class*="bg-[#dceee0]"] {
+  background-color: #17271f !important;
+}
+.dark-mode [class*="bg-[#fff0ef]"],
+.dark-mode [class*="bg-[#fce6e5]"],
+.dark-mode [class*="bg-[#fcf1f5]"],
+.dark-mode [class*="bg-[#f8d9d5]"] {
+  background-color: #321d24 !important;
+}
+.dark-mode [class*="bg-[#fff7e8]"],
+.dark-mode [class*="bg-[#fff9ec]"],
+.dark-mode [class*="bg-[#fff6eb]"],
+.dark-mode [class*="bg-[#fff3db]"],
+.dark-mode [class*="bg-[#faf8ef]"],
+.dark-mode [class*="bg-[#fbf0d9]"],
+.dark-mode [class*="bg-[#f5e6bd]"] {
+  background-color: #2d2618 !important;
+}
+.dark-mode [class*="bg-[#eef4fc]"],
+.dark-mode [class*="bg-[#f1f5fc]"] {
+  background-color: #182536 !important;
+}
+.dark-mode [class*="bg-[linear-gradient"] {
+  background-image: linear-gradient(135deg, #2b2140, #1d1827 55%, #2b251b) !important;
+}
+.dark-mode [class*="border-[#"],
+.dark-mode [class*="border-white"] {
+  border-color: #3d3549 !important;
+}
+.dark-mode [class*="ring-[#"] {
+  --tw-ring-color: #3d3549 !important;
+}
+.dark-mode [class*="text-[#3"],
+.dark-mode [class*="text-[#4"],
+.dark-mode [class*="text-[#5"],
+.dark-mode [class*="text-[#6"] {
+  color: #f4f0fa !important;
+}
+.dark-mode [class*="text-[#7"],
+.dark-mode [class*="text-[#8"],
+.dark-mode [class*="text-[#9"],
+.dark-mode [class*="text-[#a"],
+.dark-mode [class*="text-[#b"] {
+  color: #cfc6da !important;
+}
+.dark-mode [class*="text-[#7559bb]"],
+.dark-mode [class*="text-[#765ac0]"],
+.dark-mode [class*="text-[#775bd0]"],
+.dark-mode [class*="text-[#7960d8]"],
+.dark-mode [class*="text-[#7d60cf]"],
+.dark-mode [class*="text-[#7d61d6]"],
+.dark-mode [class*="text-[#8063cc]"],
+.dark-mode [class*="text-[#8a6bc2]"],
+.dark-mode [class*="text-[#8b6dc7]"],
+.dark-mode [class*="text-[#8e73cf]"],
+.dark-mode [class*="text-[#9478c5]"],
+.dark-mode [class*="text-[#9676c8]"],
+.dark-mode [class*="text-[#977cc7]"],
+.dark-mode [class*="text-[#9b80da]"] {
+  color: #bca7ff !important;
+}
+.dark-mode [class*="text-[#507c5c]"],
+.dark-mode [class*="text-[#56946b]"],
+.dark-mode [class*="text-[#59906a]"],
+.dark-mode [class*="text-[#5d9a70]"],
+.dark-mode [class*="text-[#609071]"],
+.dark-mode [class*="text-[#6a9679]"],
+.dark-mode [class*="text-[#6f8f78]"],
+.dark-mode [class*="text-[#6f9079]"],
+.dark-mode [class*="text-[#71927b]"],
+.dark-mode [class*="text-[#71a18a]"],
+.dark-mode [class*="text-[#76a58a]"],
+.dark-mode [class*="text-[#799582]"],
+.dark-mode [class*="text-[#88a994]"],
+.dark-mode [class*="text-[#8aa392]"],
+.dark-mode [class*="text-[#93a599]"],
+.dark-mode [class*="text-[#9eb6a5]"] {
+  color: #91d0a5 !important;
+}
+.dark-mode [class*="text-[#a44e48]"],
+.dark-mode [class*="text-[#ac574d]"],
+.dark-mode [class*="text-[#b24959]"],
+.dark-mode [class*="text-[#b75b52]"],
+.dark-mode [class*="text-[#b76c6b]"],
+.dark-mode [class*="text-[#b8756f]"] {
+  color: #ff9ea1 !important;
+}
+.dark-mode [class*="text-[#876921]"],
+.dark-mode [class*="text-[#938058]"],
+.dark-mode [class*="text-[#98762d]"],
+.dark-mode [class*="text-[#9a7028]"],
+.dark-mode [class*="text-[#9b8148]"],
+.dark-mode [class*="text-[#a39376]"],
+.dark-mode [class*="text-[#a48a4c]"],
+.dark-mode [class*="text-[#a57425]"],
+.dark-mode [class*="text-[#b6a17e]"] {
+  color: #e5c477 !important;
+}
+.dark-mode [class*="text-[#6e92c1]"],
+.dark-mode [class*="text-[#7694bd]"] {
+  color: #91baf0 !important;
+}
+.dark-mode input,
+.dark-mode select {
+  border-color: #453b52 !important;
+  background-color: #17131f !important;
+  color: #f4f0fa !important;
+}
+.dark-mode input::placeholder {
+  color: #92899d !important;
+}
+.dark-mode progress {
+  background-color: #322a3d;
+}
+.dark-mode .theme-toggle {
+  border-color: #51445f !important;
+  background-color: #292137 !important;
+  color: #d8c9ee !important;
+}
+@media (max-width: 767px) {
+  html {
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
+  }
+  body {
+    overflow-x: hidden;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button { transition: scale 150ms ease-out, background-color 150ms ease-out; }
+  button:active { scale: .96; }
+  .completion-backdrop {
+    animation: completion-fade-in 180ms ease-out both;
+  }
+  .completion-modal {
+    animation: completion-zoom-in 420ms cubic-bezier(.2, .85, .3, 1.15) both;
+  }
+  .completion-backdrop.completion-backdrop-closing {
+    animation: completion-fade-out 220ms ease-in both;
+  }
+  .completion-modal.completion-modal-closing {
+    animation: completion-zoom-out 220ms ease-in both;
+  }
+  .completion-badge {
+    animation: completion-badge-bounce 650ms 180ms cubic-bezier(.2, .85, .3, 1.2) both;
+  }
+  .daylight-toast {
+    animation: toast-slide-in 320ms cubic-bezier(.2, .85, .3, 1.1) both;
+  }
+  .daylight-toast.daylight-toast-exiting {
+    pointer-events: none;
+    animation: toast-slide-out 260ms ease-in both;
+  }
+  .completion-confetti {
+    position: absolute;
+    top: -18px;
+    left: var(--confetti-left);
+    display: block;
+    width: 8px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--confetti-color);
+    animation: completion-confetti-fall 1.5s var(--confetti-delay) ease-out both;
+  }
+}
+@keyframes completion-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes completion-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes completion-zoom-in {
+  from { opacity: 0; transform: scale(.72); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes completion-zoom-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(.72); }
+}
+@keyframes completion-badge-bounce {
+  0% { transform: scale(.65) rotate(-8deg); }
+  55% { transform: scale(1.12) rotate(4deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes completion-confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(0) rotate(var(--confetti-rotate));
+  }
+  12% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translateY(390px) rotate(calc(var(--confetti-rotate) + 520deg));
+  }
+}
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateY(14px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-slide-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-16px) scale(.97); }
+}
