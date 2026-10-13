@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
-import {
-  addTask as addDatabaseTask,
-  deleteTask as deleteDatabaseTask,
-  getTasks,
-  reorderTasks as reorderDatabaseTasks,
-} from "../app/actions/tasks"
+import type { Task as DatabaseTask } from "../lib/tasks"
 import {
   mdiArrowRight,
   mdiCalendarMonthOutline,
@@ -150,6 +145,20 @@ const supabase = createBrowserClient(
 )
 const MAGIC_LINK_COOLDOWN_MS = 5 * 60 * 1000
 
+async function requestTasks<T>(method: "GET" | "POST" | "DELETE" | "PATCH", body?: unknown) {
+  const response = await fetch("/api/tasks", {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!response.ok) {
+    const result = (await response.json().catch(() => null)) as { error?: string } | null
+    throw new Error(result?.error || "Unable to manage tasks.")
+  }
+  if (response.status === 204) return undefined as T
+  return (await response.json()) as T
+}
+
 export default function App() {
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -262,7 +271,7 @@ export default function App() {
         setAuth(session?.user ? null : "login")
         setAuthLoading(false)
         if (session?.user) {
-          void getTasks()
+          void requestTasks<DatabaseTask[]>("GET")
             .then((databaseTasks) => {
               setTasks(
                 databaseTasks.map((task) => ({
@@ -638,7 +647,7 @@ export default function App() {
     if (taskDate === todayKey) {
       setTasks([...tasks, newTask])
       if (supabaseUser) {
-        void addDatabaseTask({
+        void requestTasks('POST', {
           name: newTask.name,
           duration_minutes: newTask.minutes,
           priority: newTask.priority as "Low" | "Medium" | "High",
@@ -837,7 +846,7 @@ export default function App() {
     setTasks((current) => current.filter((item) => item.id !== task.id))
     if (typeof task.id === "string") {
       try {
-        await deleteDatabaseTask(task.id)
+        await requestTasks("DELETE", { id: task.id })
       } catch (databaseError) {
         showToast(
           databaseError instanceof Error
@@ -859,7 +868,9 @@ export default function App() {
     setTasks(nextTasks)
 
     if (supabaseUser && nextTasks.every((task) => typeof task.id === "string")) {
-      void reorderDatabaseTasks(nextTasks.map((task) => String(task.id))).catch(
+      void requestTasks("PATCH", {
+        taskIds: nextTasks.map((task) => String(task.id)),
+      }).catch(
         (databaseError) =>
           showToast(
             databaseError instanceof Error
