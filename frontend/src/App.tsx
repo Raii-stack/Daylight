@@ -148,6 +148,7 @@ const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 )
+const MAGIC_LINK_COOLDOWN_MS = 5 * 60 * 1000
 
 export default function App() {
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
@@ -182,6 +183,11 @@ export default function App() {
     () => localStorage.getItem("daylight-user-email") || "alex@example.com",
   )
   const [notice, setNotice] = useState("")
+  const [magicLinkCooldownUntil, setMagicLinkCooldownUntil] = useState(() => {
+    const saved = Number(localStorage.getItem("daylight-magic-link-cooldown"))
+    return Number.isFinite(saved) && saved > Date.now() ? saved : 0
+  })
+  const [googleLoginLoading, setGoogleLoginLoading] = useState(false)
   const [name, setName] = useState("")
   const [mins, setMins] = useState("0")
   const [taskHours, setTaskHours] = useState("0")
@@ -225,6 +231,12 @@ export default function App() {
       : "light"
   })
   useEffect(() => {
+    const cooldownTimer = window.setInterval(() => {
+      setMagicLinkCooldownUntil((current) =>
+        current > Date.now() ? current : 0,
+      )
+    }, 1000)
+
     const authError = new URLSearchParams(window.location.search).get(
       "auth_error",
     )
@@ -279,6 +291,7 @@ export default function App() {
       },
     )
     return () => {
+      window.clearInterval(cooldownTimer)
       mounted = false
       authListener.subscription.unsubscribe()
     }
@@ -771,24 +784,48 @@ export default function App() {
     })
   }
   async function signInWithGoogle() {
+    if (googleLoginLoading) return
+    setGoogleLoginLoading(true)
     const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=/`,
       },
     })
-    if (signInError) setNotice(signInError.message)
+    if (signInError) {
+      setNotice(signInError.message)
+      setGoogleLoginLoading(false)
+    }
   }
   async function signInWithEmail(submittedEmail: string) {
+    const remainingMs = magicLinkCooldownUntil - Date.now()
+    if (remainingMs > 0) {
+      setNotice(
+        `A login link was already sent. Try again in ${Math.ceil(
+          remainingMs / 60_000,
+        )} minute${Math.ceil(remainingMs / 60_000) === 1 ? "" : "s"}.`,
+      )
+      return
+    }
+
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: submittedEmail,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
       },
     })
-    showToast(
-      signInError ? signInError.message : "Check your email for a login link.",
+    if (signInError) {
+      setNotice(signInError.message)
+      return
+    }
+
+    const cooldownUntil = Date.now() + MAGIC_LINK_COOLDOWN_MS
+    localStorage.setItem(
+      "daylight-magic-link-cooldown",
+      String(cooldownUntil),
     )
+    setMagicLinkCooldownUntil(cooldownUntil)
+    setNotice("The link has been sent to your email. Check your inbox.")
   }
   async function signOut() {
     await supabase.auth.signOut()
@@ -903,8 +940,17 @@ export default function App() {
                   placeholder="you@example.com"
                 />
               </label>
-              <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7960d8] py-3 font-medium text-white">
-                Send magic link
+              <button
+                disabled={magicLinkCooldownUntil > Date.now()}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7960d8] py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {magicLinkCooldownUntil > Date.now()
+                  ? `Resend in ${Math.ceil(
+                      (magicLinkCooldownUntil - Date.now()) / 60_000,
+                    )} minute${Math.ceil(
+                      (magicLinkCooldownUntil - Date.now()) / 60_000,
+                    ) === 1 ? "" : "s"}`
+                  : "Send magic link"}
                 <Icon name="arrow" className="size-4" />
               </button>
             </form>
@@ -914,11 +960,12 @@ export default function App() {
               <div className="h-px flex-1 bg-[#ecebf1]" />
             </div>
             <button
-              className="w-full rounded-lg border border-[#dedee8] py-3 text-sm font-medium"
+              disabled={googleLoginLoading}
+              className="w-full rounded-lg border border-[#dedee8] py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void signInWithGoogle()}
             >
-              <span className="mr-3 font-bold text-blue-600">G</span>Continue
-              with Google
+              <span className="mr-3 font-bold text-blue-600">G</span>
+              {googleLoginLoading ? "Opening Google..." : "Continue with Google"}
             </button>
             <p role="status" className="mt-4 text-sm text-[#706987]">
               {notice}
