@@ -144,6 +144,7 @@ const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 )
 const MAGIC_LINK_COOLDOWN_MS = 5 * 60 * 1000
+const PLAN_START = "00:00"
 
 async function requestTasks<T>(method: "GET" | "POST" | "DELETE" | "PATCH", body?: unknown) {
   const response = await fetch("/api/tasks", {
@@ -180,9 +181,6 @@ export default function App() {
   const [draftHours, setDraftHours] = useState(
     () => localStorage.getItem("daylight-hours") || "6",
   )
-  const [startTime, setStartTime] = useState(
-    () => localStorage.getItem("daylight-start-time") || "15:00",
-  )
   const [page, setPage] = useState("My planner")
   const [auth, setAuth] = useState<"login" | "signup" | null>("login")
   const [user, setUser] = useState(
@@ -215,16 +213,10 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [exitingToastIds, setExitingToastIds] = useState<string[]>([])
   const [draggedTaskId, setDraggedTaskId] = useState<Task["id"] | null>(null)
-  const [dismissedReminders, setDismissedReminders] = useState<string[]>(() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem("daylight-dismissed-reminders") || "[]",
-      )
-    } catch {
-      return []
-    }
-  })
   const [now, setNow] = useState(() => new Date())
+  const [timerRunning, setTimerRunning] = useState(false)
+  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null)
+  const [timerElapsedSeconds, setTimerElapsedSeconds] = useState(0)
   const [showFloatingClock, setShowFloatingClock] = useState(false)
   const [history, setHistory] =
     useState<Record<string, DayRecord>>(loadHistory)
@@ -274,19 +266,20 @@ export default function App() {
           void requestTasks<DatabaseTask[]>("GET")
             .then((databaseTasks) => {
               setTasks(
-                databaseTasks.map((task) => ({
-                  id: task.id,
-                  name: task.name,
-                  minutes: task.duration_minutes,
-                  priority: task.priority,
-                  deadline: new Date(task.deadline).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false,
-                  }),
-                  emoji: "📚",
-                  done: false,
-                })),
+                databaseTasks.map((task, index) => {
+                  const taskStart = databaseTasks
+                    .slice(0, index)
+                    .reduce((sum, item) => sum + item.duration_minutes, 0)
+                  return {
+                    id: task.id,
+                    name: task.name,
+                    minutes: task.duration_minutes,
+                    priority: task.priority,
+                    deadline: toClockValue(taskStart + task.duration_minutes),
+                    emoji: "📚",
+                    done: false,
+                  }
+                }),
               )
             })
             .catch((loadError) =>
@@ -329,9 +322,6 @@ export default function App() {
     localStorage.setItem("daylight-hours", hours)
   }, [hours])
   useEffect(() => {
-    localStorage.setItem("daylight-start-time", startTime)
-  }, [startTime])
-  useEffect(() => {
     localStorage.setItem("daylight-user-name", user)
     localStorage.setItem("daylight-user-email", email)
   }, [user, email])
@@ -373,6 +363,16 @@ export default function App() {
     0,
     Math.min(1440, Math.round((Number(hours) || 0) * 60)),
   )
+  useEffect(() => {
+    if (!timerRunning || timerStartedAt === null) return
+    const timer = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - timerStartedAt) / 1000)
+      const limit = available * 60
+      setTimerElapsedSeconds(Math.min(elapsed, limit))
+      if (elapsed >= limit) setTimerRunning(false)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [available, timerRunning, timerStartedAt])
   const used = tasks.reduce((sum, task) => sum + effectiveMinutes(task), 0)
   const savedMinutes = tasks.reduce(
     (sum, task) =>
@@ -383,8 +383,14 @@ export default function App() {
     0,
   )
   const remaining = available - used
-  const scheduleStart = toMinutes(startTime)
+  const scheduleStart = 0
   const scheduleEnd = scheduleStart + used
+  const countdownSeconds = Math.max(0, available * 60 - timerElapsedSeconds)
+  const countdownMinutes = Math.floor(countdownSeconds / 60)
+  const countdownRemainder = countdownSeconds % 60
+  const countdownLabel = `${String(countdownMinutes).padStart(2, "0")}:${String(
+    countdownRemainder,
+  ).padStart(2, "0")}`
   const largestDeadlineOverrun = tasks.reduce((largest, task, index) => {
     const taskEnd =
       scheduleStart +
@@ -427,7 +433,7 @@ export default function App() {
   const currentRecord: DayRecord = {
     tasks,
     availableMinutes: available,
-    startTime,
+    startTime: PLAN_START,
   }
   const historyWithToday = { ...history, [todayKey]: currentRecord }
   const isCompleteDay = (record?: DayRecord) =>
@@ -468,7 +474,7 @@ export default function App() {
     const nextRecord: DayRecord = {
       tasks,
       availableMinutes: available,
-      startTime,
+      startTime: PLAN_START,
     }
     setHistory((current) => {
       const next = { ...current, [todayKey]: nextRecord }
@@ -476,113 +482,10 @@ export default function App() {
       return next
     })
     localStorage.setItem("daylight-active-date", todayKey)
-  }, [tasks, available, startTime, todayKey])
+  }, [tasks, available, todayKey])
   useEffect(() => {
     if (taskDate < todayKey) setTaskDate(todayKey)
   }, [taskDate, todayKey])
-  useEffect(() => {
-    if (!tasks.length) return
-    const currentMinute = now.getHours() * 60 + now.getMinutes()
-    const reminders: Array<{ id: string; message: string }> = []
-    const minutesUntilStart = scheduleStart - currentMinute
-
-    if (
-      tasks.some((task) => !task.done) &&
-      minutesUntilStart >= 0 &&
-      minutesUntilStart <= 30
-    ) {
-      reminders.push({
-        id: `${todayKey}-plan-start-${scheduleStart}`,
-        message:
-          minutesUntilStart === 0
-            ? `Your plan starts now at ${time(scheduleStart)}.`
-            : `Your plan starts in ${minutesUntilStart} minute${minutesUntilStart === 1 ? "" : "s"} at ${time(scheduleStart)}.`,
-      })
-    } else if (
-      tasks.some((task) => !task.done) &&
-      currentMinute > scheduleStart &&
-      currentMinute <= scheduleEnd
-    ) {
-      reminders.push({
-        id: `${todayKey}-plan-active-${scheduleStart}`,
-        message: `Your plan started at ${time(scheduleStart)}. You can continue with your next unfinished task now.`,
-      })
-    }
-
-    let taskStart = scheduleStart
-    tasks.forEach((task, index) => {
-      const minutesUntilTask = taskStart - currentMinute
-      const taskEnd = taskStart + effectiveMinutes(task)
-      if (
-        index > 0 &&
-        !task.done &&
-        minutesUntilTask >= 0 &&
-        minutesUntilTask <= 15
-      ) {
-        reminders.push({
-          id: `${todayKey}-task-start-${task.id}-${taskStart}`,
-          message:
-            minutesUntilTask === 0
-              ? `${task.emoji} ${task.name} starts now.`
-              : `${task.emoji} ${task.name} starts in ${minutesUntilTask} minute${minutesUntilTask === 1 ? "" : "s"}.`,
-        })
-      } else if (
-        !task.done &&
-        currentMinute >= taskStart &&
-        currentMinute < taskEnd
-      ) {
-        reminders.push({
-          id: `${todayKey}-task-active-${task.id}-${taskStart}`,
-          message: `${task.emoji} ${task.name} is ready to work on now.`,
-        })
-      }
-
-      const deadlineMinute = toMinutes(task.deadline)
-      const minutesUntilDeadline = deadlineMinute - currentMinute
-      if (
-        !task.done &&
-        minutesUntilDeadline >= 0 &&
-        minutesUntilDeadline <= 30
-      ) {
-        reminders.push({
-          id: `${todayKey}-deadline-${task.id}-${deadlineMinute}`,
-          message:
-            minutesUntilDeadline === 0
-              ? `${task.emoji} ${task.name} is due now.`
-              : `${task.emoji} ${task.name} is due in ${minutesUntilDeadline} minute${minutesUntilDeadline === 1 ? "" : "s"} at ${time(deadlineMinute)}.`,
-        })
-      } else if (!task.done && minutesUntilDeadline < 0) {
-        reminders.push({
-          id: `${todayKey}-deadline-overdue-${task.id}-${deadlineMinute}`,
-          message: `${task.emoji} ${task.name} is overdue by ${duration(Math.abs(minutesUntilDeadline))}.`,
-        })
-      }
-      taskStart = taskEnd
-    })
-
-    reminders.forEach((reminder) => {
-      if (dismissedReminders.includes(reminder.id)) return
-      setToasts((current) =>
-        current.some((toast) => toast.id === reminder.id)
-          ? current
-          : [
-              ...current,
-              {
-                id: reminder.id,
-                message: reminder.message,
-                reminder: true,
-              },
-            ],
-      )
-    })
-  }, [
-    dismissedReminders,
-    now,
-    scheduleEnd,
-    scheduleStart,
-    tasks,
-    todayKey,
-  ])
   function showToast(message: string) {
     const id = `notice-${Date.now()}`
     setToasts((current) => [
@@ -597,18 +500,6 @@ export default function App() {
     setExitingToastIds((current) =>
       current.includes(toast.id) ? current : [...current, toast.id],
     )
-    if (toast.reminder) {
-      setDismissedReminders((current) => {
-        const next = current.includes(toast.id)
-          ? current
-          : [...current, toast.id]
-        localStorage.setItem(
-          "daylight-dismissed-reminders",
-          JSON.stringify(next),
-        )
-        return next
-      })
-    }
     window.setTimeout(() => {
       setToasts((current) => current.filter((item) => item.id !== toast.id))
       setExitingToastIds((current) =>
@@ -629,8 +520,7 @@ export default function App() {
     }
     const targetRecord = history[taskDate]
     const targetTasks = taskDate === todayKey ? tasks : targetRecord?.tasks || []
-    const targetStartTime =
-      taskDate === todayKey ? startTime : targetRecord?.startTime || startTime
+    const targetStartTime = PLAN_START
     const automaticFinish =
       toMinutes(targetStartTime) +
       targetTasks.reduce((sum, task) => sum + effectiveMinutes(task), 0) +
@@ -651,7 +541,9 @@ export default function App() {
           name: newTask.name,
           duration_minutes: newTask.minutes,
           priority: newTask.priority as "Low" | "Medium" | "High",
-          deadline: new Date(`${taskDate}T${newTask.deadline}:00`).toISOString(),
+          deadline: new Date(
+            Date.UTC(2000, 0, 1, 0, toMinutes(newTask.deadline)),
+          ).toISOString(),
         }).catch((databaseError) =>
           showToast(
             databaseError instanceof Error
@@ -665,7 +557,7 @@ export default function App() {
         const existing = current[taskDate] || {
           tasks: [],
           availableMinutes: available,
-          startTime,
+          startTime: PLAN_START,
         }
         const next = {
           ...current,
@@ -1399,15 +1291,34 @@ export default function App() {
                       subtitle="One thing at a time. You’re doing great."
                     />
                     <div className="flex items-end gap-2">
-                      <label className="text-[10px] font-medium text-[#8b819b]">
-                        Start time
-                        <input
-                          type="time"
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          className="mt-1 block rounded-md border border-[#dedee8] bg-white px-2 py-1.5 text-xs"
-                        />
-                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!timerRunning) {
+                            setTimerStartedAt(
+                              Date.now() - timerElapsedSeconds * 1000,
+                            )
+                            setTimerRunning(true)
+                          } else {
+                            setTimerRunning(false)
+                          }
+                        }}
+                        disabled={available <= 0 || countdownSeconds === 0}
+                        className="rounded-md bg-[#8164d7] px-3 py-1.5 text-[10px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {timerRunning ? "Pause timer" : "Start timer"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTimerRunning(false)
+                          setTimerStartedAt(null)
+                          setTimerElapsedSeconds(0)
+                        }}
+                        className="rounded-md border border-[#dedee8] px-3 py-1.5 text-[10px] font-medium text-[#8b819b]"
+                      >
+                        Reset
+                      </button>
                       <span className="mb-0.5 rounded-md bg-[#f5f3fa] px-2 py-1.5 text-[10px] text-[#8b819b]">
                         {tasks.filter((task) => !task.done).length} remaining
                       </span>
@@ -1415,8 +1326,10 @@ export default function App() {
                   </div>
                   <div className="mt-6 flex items-center gap-2 text-[10px] font-medium text-[#9992a6]">
                     <span className="size-1.5 rounded-full bg-[#ad9acb]" />
-                    START OF YOUR PLAN{" "}
-                    <span className="ml-auto">{time(scheduleStart)}</span>
+                    TIMER{" "}
+                    <span className="ml-auto font-semibold tabular-nums text-[#8063cc]">
+                      {countdownLabel} remaining
+                    </span>
                   </div>
                   <div className="mt-3 space-y-3">
                     {tasks.length === 0 && (
@@ -1494,7 +1407,7 @@ export default function App() {
                               {task.name}
                             </p>
                             <p className="mt-1 text-[11px] tabular-nums text-[#8d849b]">
-                              {time(start)} – {time(end)}
+                              {duration(start)} – {duration(end)}
                               <span className="mx-2">·</span>
                               {duration(taskTime)}
                             </p>
@@ -1513,8 +1426,8 @@ export default function App() {
                               }`}
                             >
                               {deadlineDifference >= 0
-                                ? `${duration(deadlineDifference)} available before ${time(limit)} deadline`
-                                : `${duration(Math.abs(deadlineDifference))} past ${time(limit)} deadline`}
+                                ? `${duration(deadlineDifference)} available before the timer mark`
+                                : `${duration(Math.abs(deadlineDifference))} past the timer mark`}
                             </p>
                           </div>
                           <span
@@ -1556,8 +1469,8 @@ export default function App() {
                   )}
                   <div className="mt-5 flex items-center gap-2 text-[10px] text-[#a39bad]">
                     <Icon name="clock" className="size-3" />
-                    Schedule runs from {time(scheduleStart)} to{" "}
-                    {time(scheduleEnd)} · All times are local
+                    Schedule runs from the start of the timer to{" "}
+                    {duration(scheduleEnd)} · Deadlines follow elapsed plan time
                   </div>
                 </section>
               )}
@@ -1766,8 +1679,8 @@ export default function App() {
                                   {task.name}
                                 </p>
                                 <p className="mt-1 text-[10px] text-[#968c9f]">
-                                  {time(start)} –{" "}
-                                  {time(start + taskTime)} ·{" "}
+                                  {duration(start)} –{" "}
+                                  {duration(start + taskTime)} ·{" "}
                                   {duration(taskTime)}
                                 </p>
                               </div>
@@ -2362,14 +2275,13 @@ export default function App() {
       </div>
       {showFloatingClock && (
         <div className="daylight-toast fixed top-4 right-4 z-30 flex items-center gap-2 rounded-lg border border-[#e5e4ec] bg-white/95 px-3 py-2 text-[#79758b] shadow-[0_10px_30px_#30284220] backdrop-blur-md sm:right-6">
-          <Icon name="calendar" className="size-4" />
+          <Icon name="clock" className="size-4" />
           <div>
             <p className="whitespace-nowrap text-[10px] leading-none text-[#9992a6]">
-              <span className="sm:hidden">{shortDate}</span>
-              <span className="hidden sm:inline">{date}</span>
+      PLAN TIMER
             </p>
             <p className="mt-1 text-xs font-semibold tabular-nums text-[#625b70]">
-              {currentTime}
+      {countdownLabel} remaining
             </p>
           </div>
         </div>
