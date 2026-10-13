@@ -4,14 +4,17 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "start": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "next dev",
+    "start": "next start",
+    "build": "next build",
+    "preview": "next dev",
     "format": "oxfmt"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.4",
+    "next": "^15.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
