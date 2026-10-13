@@ -225,6 +225,18 @@ export default function App() {
       : "light"
   })
   useEffect(() => {
+    const authError = new URLSearchParams(window.location.search).get(
+      "auth_error",
+    )
+    if (authError) {
+      setNotice(
+        authError.includes("flow_state_already_used")
+          ? "This login link has already been used or expired. Start a new sign-in attempt."
+          : authError,
+      )
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+
     let mounted = true
     void supabase.auth.getUser().then(({ data }) => {
       if (!mounted) return
@@ -761,14 +773,18 @@ export default function App() {
   async function signInWithGoogle() {
     const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/`,
+      },
     })
     if (signInError) setNotice(signInError.message)
   }
   async function signInWithEmail(submittedEmail: string) {
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: submittedEmail,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
+      },
     })
     showToast(
       signInError ? signInError.message : "Check your email for a login link.",
@@ -846,13 +862,6 @@ export default function App() {
         </div>
         <div className="flex items-center justify-center px-6 py-12">
           <div className="w-full max-w-sm">
-            <button
-              onClick={() => setAuth(null)}
-              className="mb-10 flex items-center gap-2 text-sm text-[#6d638f]"
-            >
-              <Icon name="chevronLeft" className="size-4" />
-              Back to planner
-            </button>
             <div className="mb-8 text-4xl">👋</div>
             <h2 className="text-3xl font-semibold tracking-tight">
               {auth === "login" ? "Welcome back" : "Find your daily rhythm"}
