@@ -155,6 +155,30 @@ const supabase = createBrowserClient(
 )
 const MAGIC_LINK_COOLDOWN_MS = 5 * 60 * 1000
 const PLAN_START = "00:00"
+const TIMER_STORAGE_KEY = "daylight-plan-timer"
+
+function loadTimerState() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(TIMER_STORAGE_KEY) || "null",
+    ) as {
+      running?: boolean
+      startedAt?: number | null
+      elapsedSeconds?: number
+    } | null
+    return {
+      running: saved?.running === true,
+      startedAt:
+        typeof saved?.startedAt === "number" ? saved.startedAt : null,
+      elapsedSeconds:
+        typeof saved?.elapsedSeconds === "number"
+          ? Math.max(0, saved.elapsedSeconds)
+          : 0,
+    }
+  } catch {
+    return { running: false, startedAt: null, elapsedSeconds: 0 }
+  }
+}
 
 async function requestTasks<T>(method: "GET" | "POST" | "DELETE" | "PATCH", body?: unknown) {
   const response = await fetch("/api/tasks", {
@@ -224,9 +248,13 @@ export default function App() {
   const [exitingToastIds, setExitingToastIds] = useState<string[]>([])
   const [draggedTaskId, setDraggedTaskId] = useState<Task["id"] | null>(null)
   const [now, setNow] = useState(() => new Date())
-  const [timerRunning, setTimerRunning] = useState(false)
-  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null)
-  const [timerElapsedSeconds, setTimerElapsedSeconds] = useState(0)
+  const [timerRunning, setTimerRunning] = useState(() => loadTimerState().running)
+  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(
+    () => loadTimerState().startedAt,
+  )
+  const [timerElapsedSeconds, setTimerElapsedSeconds] = useState(
+    () => loadTimerState().elapsedSeconds,
+  )
   const [showFloatingClock, setShowFloatingClock] = useState(false)
   const [history, setHistory] =
     useState<Record<string, DayRecord>>(loadHistory)
@@ -363,6 +391,16 @@ export default function App() {
     const clock = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(clock)
   }, [])
+  useEffect(() => {
+    localStorage.setItem(
+      TIMER_STORAGE_KEY,
+      JSON.stringify({
+        running: timerRunning,
+        startedAt: timerStartedAt,
+        elapsedSeconds: timerElapsedSeconds,
+      }),
+    )
+  }, [timerElapsedSeconds, timerRunning, timerStartedAt])
   useEffect(() => {
     const updateFloatingClock = () => setShowFloatingClock(window.scrollY > 150)
     updateFloatingClock()
