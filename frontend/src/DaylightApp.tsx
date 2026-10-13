@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react"
-import { createClient, SupabaseClient, User } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
+import type { User } from "@supabase/supabase-js"
+import { addTask, deleteTask, getTasks } from "../app/actions/tasks"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
 
 type Task = {
   id: string
@@ -50,25 +52,30 @@ export default function DaylightApp() {
   }, [])
 
   async function loadTasks() {
-    if (!supabase) return
-    const { data, error } = await supabase
-      .from<Task>("tasks")
-      .select("*")
-      .order("deadline", { ascending: true })
-    if (error) {
-      console.error("Failed to load tasks:", error.message)
-      return
+    try {
+      setTasks(await getTasks())
+    } catch (error) {
+      console.error(
+        "Failed to load tasks:",
+        error instanceof Error ? error.message : error,
+      )
     }
-    setTasks(data ?? [])
   }
 
   async function signInWithGoogle() {
-    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin + "/dashboard" } })
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    })
+    if (error) alert(error.message)
   }
 
   async function signInWithEmail(e: React.FormEvent) {
     e.preventDefault()
-    const { error } = await supabase.auth.signInWithOtp({ email })
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    })
     if (error) alert(error.message)
     else alert("Check your email for a login link (magic link).")
   }
@@ -83,23 +90,27 @@ export default function DaylightApp() {
     e.preventDefault()
     if (!user) return alert("Sign in first")
     if (!newTaskName.trim()) return alert("Name required")
-    const payload = {
-      user_id: user.id,
+    try {
+      const task = await addTask({
       name: newTaskName.trim(),
       duration_minutes: Number(newTaskMinutes),
       priority: newTaskPriority,
-      deadline: new Date(newTaskDeadline).toISOString(),
+        deadline: new Date(newTaskDeadline).toISOString(),
+      })
+      setTasks((current) => [...current, task])
+      setNewTaskName("")
+    } catch (error) {
+      alert(`Failed to add task: ${error instanceof Error ? error.message : error}`)
     }
-    const { data, error } = await supabase.from("tasks").insert(payload).select().single()
-    if (error) return alert("Failed to add task: " + error.message)
-    setTasks((t) => [...t, data as Task])
-    setNewTaskName("")
   }
 
   async function handleDeleteTask(id: string) {
-    const { error } = await supabase.from("tasks").delete().eq("id", id)
-    if (error) return alert("Failed to delete: " + error.message)
-    setTasks((t) => t.filter((x) => x.id !== id))
+    try {
+      await deleteTask(id)
+      setTasks((current) => current.filter((task) => task.id !== id))
+    } catch (error) {
+      alert(`Failed to delete: ${error instanceof Error ? error.message : error}`)
+    }
   }
 
   if (loading) return <div>Loading...</div>

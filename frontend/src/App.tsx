@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react"
+import { createBrowserClient } from "@supabase/ssr"
+import type { User as SupabaseUser } from "@supabase/supabase-js"
+import { addTask as addDatabaseTask, deleteTask as deleteDatabaseTask, getTasks } from "../app/actions/tasks"
 import {
   mdiArrowRight,
   mdiCalendarMonthOutline,
@@ -16,7 +19,7 @@ import {
 } from "@mdi/js"
 
 type Task = {
-  id: number
+  id: string | number
   name: string
   minutes: number
   priority: string
@@ -40,44 +43,6 @@ type ToastMessage = {
   message: string
   reminder: boolean
 }
-const initialTasks: Task[] = [
-  {
-    id: 1,
-    name: "Math homework",
-    minutes: 90,
-    priority: "High",
-    deadline: "16:30",
-    emoji: "📚",
-    done: false,
-  },
-  {
-    id: 2,
-    name: "Read a chapter",
-    minutes: 45,
-    priority: "Medium",
-    deadline: "17:30",
-    emoji: "📖",
-    done: false,
-  },
-  {
-    id: 3,
-    name: "Workout & recharge",
-    minutes: 60,
-    priority: "Medium",
-    deadline: "19:00",
-    emoji: "🏃",
-    done: false,
-  },
-  {
-    id: 4,
-    name: "Practice guitar",
-    minutes: 30,
-    priority: "Low",
-    deadline: "20:00",
-    emoji: "🎸",
-    done: false,
-  },
-]
 function Icon({ name, className = "" }: { name: string, className?: string }) {
   const paths: Record<string, string> = {
     grid: mdiViewDashboardOutline,
@@ -174,8 +139,14 @@ const panel =
   "rounded-2xl bg-white p-6 shadow-[0_2px_12px_#24243f04] ring-1 ring-[#ececf2]"
 const input =
   "w-full rounded-lg border border-[#dedee8] bg-white px-3 py-2.5 text-base sm:text-sm placeholder:text-[#a0a0b1]"
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+)
 
 export default function App() {
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
       const today = dateKey(new Date())
@@ -183,12 +154,9 @@ export default function App() {
       if (todayRecord) return todayRecord.tasks
       const activeDate = localStorage.getItem("daylight-active-date")
       if (activeDate && activeDate !== today) return []
-      return (
-        JSON.parse(localStorage.getItem("daylight-tasks") || "null") ||
-        initialTasks
-      )
+      return JSON.parse(localStorage.getItem("daylight-tasks") || "[]")
     } catch {
-      return initialTasks
+      return []
     }
   })
   const [hours, setHours] = useState(
@@ -201,7 +169,7 @@ export default function App() {
     () => localStorage.getItem("daylight-start-time") || "15:00",
   )
   const [page, setPage] = useState("My planner")
-  const [auth, setAuth] = useState<"login" | "signup" | null>(null)
+  const [auth, setAuth] = useState<"login" | "signup" | null>("login")
   const [user, setUser] = useState(
     () => localStorage.getItem("daylight-user-name") || "Alex",
   )
@@ -250,6 +218,52 @@ export default function App() {
       ? "dark"
       : "light"
   })
+  useEffect(() => {
+    let mounted = true
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!mounted) return
+      setSupabaseUser(data.user ?? null)
+      setAuth(data.user ? null : "login")
+      setAuthLoading(false)
+    })
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSupabaseUser(session?.user ?? null)
+        setAuth(session?.user ? null : "login")
+        setAuthLoading(false)
+        if (session?.user) {
+          void getTasks()
+            .then((databaseTasks) => {
+              setTasks(
+                databaseTasks.map((task) => ({
+                  id: task.id,
+                  name: task.name,
+                  minutes: task.duration_minutes,
+                  priority: task.priority,
+                  deadline: new Date(task.deadline).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  }),
+                  emoji: "📚",
+                  done: false,
+                })),
+              )
+            })
+            .catch((loadError) => setNotice(loadError instanceof Error ? loadError.message : "Unable to load tasks."))
+        }
+      },
+    )
+    return () => {
+      mounted = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+  useEffect(() => {
+    if (!supabaseUser) return
+    setUser(supabaseUser.user_metadata?.name || supabaseUser.email?.split("@")[0] || "Planner")
+    setEmail(supabaseUser.email || "")
+  }, [supabaseUser])
   useEffect(() => {
     localStorage.setItem("daylight-tasks", JSON.stringify(tasks))
   }, [tasks])
@@ -586,6 +600,14 @@ export default function App() {
     }
     if (taskDate === todayKey) {
       setTasks([...tasks, newTask])
+      if (supabaseUser) {
+        void addDatabaseTask({
+          name: newTask.name,
+          duration_minutes: newTask.minutes,
+          priority: newTask.priority as "Low" | "Medium" | "High",
+          deadline: new Date(`${taskDate}T${newTask.deadline}:00`).toISOString(),
+        }).catch((databaseError) => setNotice(databaseError instanceof Error ? databaseError.message : "Unable to save task."))
+      }
     } else {
       setHistory((current) => {
         const existing = current[taskDate] || {
@@ -718,6 +740,48 @@ export default function App() {
       emoji: task.emoji,
     })
   }
+  async function signInWithGoogle() {
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    })
+    if (signInError) setNotice(signInError.message)
+  }
+  async function signInWithEmail(submittedEmail: string) {
+    const { error: signInError } = await supabase.auth.signInWithOtp({
+      email: submittedEmail,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    })
+    setNotice(
+      signInError ? signInError.message : "Check your email for a login link.",
+    )
+  }
+  async function signOut() {
+    await supabase.auth.signOut()
+    setSupabaseUser(null)
+    setTasks([])
+    setAuth("login")
+  }
+  async function removeTask(task: Task) {
+    setTasks((current) => current.filter((item) => item.id !== task.id))
+    if (typeof task.id === "string") {
+      try {
+        await deleteDatabaseTask(task.id)
+      } catch (databaseError) {
+        setNotice(
+          databaseError instanceof Error
+            ? databaseError.message
+            : "Unable to delete task.",
+        )
+      }
+    }
+  }
+  if (authLoading)
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f8f9fc] text-sm text-[#817c91]">
+        Loading your planner...
+      </div>
+    )
   if (auth)
     return (
       <div className="grid min-h-screen bg-white lg:grid-cols-2">
@@ -764,16 +828,7 @@ export default function App() {
                 e.preventDefault()
                 const data = new FormData(e.currentTarget)
                 const submittedEmail = String(data.get("email"))
-                setUser(
-                  String(
-                    data.get("name") || submittedEmail.split("@")[0],
-                  ),
-                )
-                setEmail(submittedEmail)
-                setAuth(null)
-                setNotice(
-                  "You’re using a local demo account. Your planner is saved on this device.",
-                )
+                void signInWithEmail(submittedEmail)
               }}
             >
               {auth === "signup" && (
@@ -799,22 +854,8 @@ export default function App() {
                   placeholder="you@example.com"
                 />
               </label>
-              <label className="block text-sm font-medium">
-                Password
-                <input
-                  name="password"
-                  type="password"
-                  autoComplete={
-                    auth === "signup" ? "new-password" : "current-password"
-                  }
-                  minLength={8}
-                  required
-                  className={`${input} mt-2`}
-                  placeholder="At least 8 characters"
-                />
-              </label>
               <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7960d8] py-3 font-medium text-white">
-                {auth === "login" ? "Log in" : "Create account"}
+                Send magic link
                 <Icon name="arrow" className="size-4" />
               </button>
             </form>
@@ -825,11 +866,7 @@ export default function App() {
             </div>
             <button
               className="w-full rounded-lg border border-[#dedee8] py-3 text-sm font-medium"
-              onClick={() =>
-                setNotice(
-                  "Google sign-in is not connected in this demo. Please use the email form.",
-                )
-              }
+              onClick={() => void signInWithGoogle()}
             >
               <span className="mr-3 font-bold text-blue-600">G</span>Continue
               with Google
@@ -852,7 +889,7 @@ export default function App() {
               </button>
             </p>
             <p className="mt-8 text-center text-xs text-[#92909f]">
-              Demo accounts are local to this device.
+              Authentication is handled securely by Supabase.
             </p>
           </div>
         </div>
@@ -1387,9 +1424,7 @@ export default function App() {
                           </span>
                           <button
                             aria-label={`Delete ${task.name}`}
-                            onClick={() =>
-                              setTasks(tasks.filter((t) => t.id !== task.id))
-                            }
+                            onClick={() => void removeTask(task)}
                             className="flex size-8 shrink-0 items-center justify-center rounded-md text-[#aaa1b5] hover:bg-white hover:text-red-600"
                           >
                             <Icon name="trash" className="size-3.5" />
@@ -1795,16 +1830,6 @@ export default function App() {
                         </label>
                       </div>
                       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#ece8f1] pt-5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAuth("login")
-                            setNotice("")
-                          }}
-                          className="text-xs font-medium text-[#9b6570] hover:text-[#b24959]"
-                        >
-                          Switch demo account
-                        </button>
                         <button
                           type="submit"
                           className="rounded-lg bg-[#8063cc] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#7051b9]"

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 
-const DaylightApp = dynamic(() => import("../src/DaylightApp"), { ssr: false })
+const DaylightApp = dynamic(() => import("../src/App"), { ssr: false })
 
 export default function ClientApp() {
   return <DaylightApp />

@@ -1,13 +1,7 @@
-import { getTasks } from "../actions/tasks"
+import { redirect } from "next/navigation"
 
 export const dynamic = "force-dynamic"
 
-export default async function DashboardPage() {
-  const tasks = await getTasks()
-  return (
-    <main>
-      <h1>Dashboard</h1>
-      <p>{tasks.length} task(s) planned.</p>
-    </main>
-  )
+export default function DashboardPage() {
+  redirect("/")
 }
