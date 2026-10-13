@@ -7,7 +7,18 @@ export async function GET(request: Request) {
   const authError = requestUrl.searchParams.get("error")
   const authErrorDescription = requestUrl.searchParams.get("error_description")
   const next = requestUrl.searchParams.get("next")
-  const redirectPath = next?.startsWith("/") ? next : "/"
+  let redirectPath = "/"
+
+  if (next) {
+    try {
+      const candidate = new URL(next, requestUrl.origin)
+      if (candidate.origin === requestUrl.origin) {
+        redirectPath = `${candidate.pathname}${candidate.search}${candidate.hash}`
+      }
+    } catch {
+      redirectPath = "/"
+    }
+  }
 
   if (authError) {
     const errorUrl = new URL(redirectPath, requestUrl.origin)
