@@ -8,6 +8,7 @@ export type Task = {
   duration_minutes: number
   priority: TaskPriority
   deadline: string
+  sort_order?: number
   created_at?: string
 }
 

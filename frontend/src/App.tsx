@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
-import { addTask as addDatabaseTask, deleteTask as deleteDatabaseTask, getTasks } from "../app/actions/tasks"
+import {
+  addTask as addDatabaseTask,
+  deleteTask as deleteDatabaseTask,
+  getTasks,
+  reorderTasks as reorderDatabaseTasks,
+} from "../app/actions/tasks"
 import {
   mdiArrowRight,
   mdiCalendarMonthOutline,
@@ -194,6 +199,7 @@ export default function App() {
   const [isModalClosing, setIsModalClosing] = useState(false)
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [exitingToastIds, setExitingToastIds] = useState<string[]>([])
+  const [draggedTaskId, setDraggedTaskId] = useState<Task["id"] | null>(null)
   const [dismissedReminders, setDismissedReminders] = useState<string[]>(() => {
     try {
       return JSON.parse(
@@ -250,7 +256,13 @@ export default function App() {
                 })),
               )
             })
-            .catch((loadError) => setNotice(loadError instanceof Error ? loadError.message : "Unable to load tasks."))
+            .catch((loadError) =>
+              showToast(
+                loadError instanceof Error
+                  ? loadError.message
+                  : "Unable to load tasks.",
+              ),
+            )
         }
       },
     )
@@ -606,7 +618,13 @@ export default function App() {
           duration_minutes: newTask.minutes,
           priority: newTask.priority as "Low" | "Medium" | "High",
           deadline: new Date(`${taskDate}T${newTask.deadline}:00`).toISOString(),
-        }).catch((databaseError) => setNotice(databaseError instanceof Error ? databaseError.message : "Unable to save task."))
+        }).catch((databaseError) =>
+          showToast(
+            databaseError instanceof Error
+              ? databaseError.message
+              : "Unable to save task.",
+          ),
+        )
       }
     } else {
       setHistory((current) => {
@@ -634,7 +652,7 @@ export default function App() {
     setActivityIsAutomatic(true)
     setPriorityIsAutomatic(true)
     setError("")
-    setNotice(
+    showToast(
       taskDate === todayKey
         ? "Task added to today’s schedule."
         : `Task planned for ${new Date(`${taskDate}T12:00:00`).toLocaleDateString(
@@ -646,7 +664,7 @@ export default function App() {
   function applyAvailableTime() {
     const nextHours = Number(draftHours)
     if (!Number.isFinite(nextHours) || nextHours < 0 || nextHours > 24) {
-      setNotice("Available time must be between 0 and 24 hours.")
+      showToast("Available time must be between 0 and 24 hours.")
       return
     }
     setHours(String(nextHours))
@@ -658,7 +676,7 @@ export default function App() {
   }
   function distributeTime(weighted: boolean) {
     if (!tasks.length || available <= 0) {
-      setNotice("Add at least one task and set your available time first.")
+      showToast("Add at least one task and set your available time first.")
       return
     }
     const weights = tasks.map((task) =>
@@ -682,7 +700,7 @@ export default function App() {
     })
     setTasks(distributed)
     setDistributionMode(weighted ? "priority" : "even")
-    setNotice(
+    showToast(
       weighted
         ? "Available time distributed by priority: high-priority tasks received the most time."
         : "Available time divided evenly across all tasks.",
@@ -752,7 +770,7 @@ export default function App() {
       email: submittedEmail,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     })
-    setNotice(
+    showToast(
       signInError ? signInError.message : "Check your email for a login link.",
     )
   }
@@ -768,12 +786,34 @@ export default function App() {
       try {
         await deleteDatabaseTask(task.id)
       } catch (databaseError) {
-        setNotice(
+        showToast(
           databaseError instanceof Error
             ? databaseError.message
             : "Unable to delete task.",
         )
       }
+    }
+  }
+  function moveTask(draggedId: Task["id"], targetId: Task["id"]) {
+    if (draggedId === targetId) return
+    const fromIndex = tasks.findIndex((task) => task.id === draggedId)
+    const toIndex = tasks.findIndex((task) => task.id === targetId)
+    if (fromIndex < 0 || toIndex < 0) return
+
+    const nextTasks = [...tasks]
+    const [draggedTask] = nextTasks.splice(fromIndex, 1)
+    nextTasks.splice(toIndex, 0, draggedTask)
+    setTasks(nextTasks)
+
+    if (supabaseUser && nextTasks.every((task) => typeof task.id === "string")) {
+      void reorderDatabaseTasks(nextTasks.map((task) => String(task.id))).catch(
+        (databaseError) =>
+          showToast(
+            databaseError instanceof Error
+              ? databaseError.message
+              : "Unable to save task order.",
+          ),
+      )
     }
   }
   if (authLoading)
@@ -1051,21 +1091,6 @@ export default function App() {
               </div>
             </div>
           </div>
-          {notice && (
-            <div
-              role="status"
-              className="mb-5 flex items-center justify-between gap-4 rounded-lg bg-[#efebfb] px-4 py-3 text-sm text-[#695692]"
-            >
-              {notice}
-              <button
-                aria-label="Dismiss notification"
-                className="size-8"
-                onClick={() => setNotice("")}
-              >
-                ×
-              </button>
-            </div>
-          )}
           {page === "My planner" && (
             <section className="relative mb-7 overflow-hidden rounded-2xl bg-[#efebfa] px-7 py-7 sm:px-8">
               <div className="relative z-10 flex flex-wrap items-center justify-between gap-5 lg:pr-36">
@@ -1358,7 +1383,21 @@ export default function App() {
                       return (
                         <div
                           key={task.id}
+                          draggable
+                          onDragStart={() => setDraggedTaskId(task.id)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => {
+                            if (draggedTaskId !== null) {
+                              moveTask(draggedTaskId, task.id)
+                            }
+                            setDraggedTaskId(null)
+                          }}
+                          onDragEnd={() => setDraggedTaskId(null)}
                           className={`group flex items-center gap-3 rounded-xl px-3 py-3.5 sm:gap-4 ${
+                            draggedTaskId === task.id
+                              ? "cursor-grabbing opacity-50"
+                              : "cursor-grab"
+                          } ${
                             task.done
                               ? "bg-[#f2f8f3]"
                               : [
@@ -1753,7 +1792,7 @@ export default function App() {
                         </p>
                         <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1 text-[10px] font-medium text-[#6f8f78]">
                           <span className="size-1.5 rounded-full bg-[#70ad83]" />
-                          Local demo profile
+                          Supabase account
                         </span>
                       </div>
                     </div>
@@ -1835,6 +1874,13 @@ export default function App() {
                           className="rounded-lg bg-[#8063cc] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#7051b9]"
                         >
                           Save profile
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void signOut()}
+                          className="rounded-lg border border-[#f0d4d4] px-5 py-2.5 text-xs font-semibold text-[#b75b52] hover:bg-[#fff4f3]"
+                        >
+                          Log out
                         </button>
                       </div>
                     </form>
