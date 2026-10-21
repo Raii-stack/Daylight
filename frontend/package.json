@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "start": "next start",
+    "prebuild": "node scripts/clean-next-generated-types.mjs",
     "build": "next build",
     "preview": "next dev",
     "format": "oxfmt"

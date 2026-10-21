@@ -36,6 +36,7 @@
     ]
   },
   "include": [
+    "app",
     "src",
     "vite.config.ts",
     ".next/types/**/*.ts"

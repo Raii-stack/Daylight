@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
-import type { Task as DatabaseTask } from "../../lib/tasks"
+import type { Task as DatabaseTask } from "../../../lib/tasks"
 import {
   mdiArrowRight,
   mdiCalendarMonthOutline,
